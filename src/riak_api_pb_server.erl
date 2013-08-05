@@ -35,7 +35,8 @@
 -behaviour(gen_fsm).
 
 %% API
--export([start_link/0, set_socket/2]).
+-export([start_link/0, set_socket/2,
+         sockname/0, peername/0]).
 
 %% States
 -export([wait_for_socket/2, wait_for_socket/3, wait_for_tls/2, wait_for_tls/3,
@@ -73,6 +74,18 @@ start_link() ->
 set_socket(Pid, Socket) ->
     gen_fsm:sync_send_event(Pid, {set_socket, Socket}, infinity).
 
+%% @doc When called from the same process (as in a PB service),
+%% returns the address/port of the server socket.
+-spec sockname() -> {ok, {inet:ip_address(), inet:port_number()}} | {error, inet:posix()} | undefined.
+sockname() ->
+    get(sockname).
+
+%% @doc When called from the same process (as in a PB service),
+%% returns the address/port of the connected client.
+-spec peername() -> {ok, {inet:ip_address(), inet:port_number()}} | {error, inet:posix()} | undefined.
+peername() ->
+    get(peername).
+
 %% @doc The gen_server init/1 callback, initializes the
 %% riak_api_pb_server.
 -spec init(list()) -> {ok, #state{}}.
@@ -90,7 +103,10 @@ wait_for_socket(_Event, State) ->
 
 wait_for_socket({set_socket, Socket}, _From, State=#state{transport=Transport}) ->
     {ok, PeerInfo} = Transport:peername(Socket),
+    {ok, SockInfo} = Transport:sockname(Socket),
     Transport:setopts(Socket, [{active, once}]),
+    put(peername, PeerInfo),
+    put(sockname, SockInfo),
     %% check if security is enabled, if it is wait for TLS, otherwise go
     %% straight into connected state
     case app_helper:get_env(riak_core, security, false) of
