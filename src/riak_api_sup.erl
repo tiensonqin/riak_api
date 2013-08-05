@@ -47,7 +47,7 @@ start_link() ->
       MaxT :: pos_integer(),
       ChildSpec :: supervisor:child_spec().
 init([]) ->
-    Listeners = riak_api_pb_listener:get_listeners(),
+    Listeners = riak_api_config:get_listeners(pb),
     Helper = ?CHILD(riak_api_pb_registration_helper, worker),
     Registrar = ?CHILD(riak_api_pb_registrar, worker),
     NetworkProcesses = if Listeners /= [] ->
