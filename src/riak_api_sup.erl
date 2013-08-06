@@ -50,6 +50,7 @@ init([]) ->
     Listeners = riak_api_config:get_listeners(pb),
     Helper = ?CHILD(riak_api_pb_registration_helper, worker),
     Registrar = ?CHILD(riak_api_pb_registrar, worker),
+    AutoConfig = ?CHILD(riak_api_autoconfig, worker),
     NetworkProcesses = if Listeners /= [] ->
                                [?CHILD(riak_api_pb_sup, supervisor)] ++
                                    listener_specs(Listeners);
@@ -58,7 +59,7 @@ init([]) ->
                                           " PB connections will be disabled."),
                                []
                        end,
-    {ok, {{one_for_one, 10, 10}, [Helper, Registrar|NetworkProcesses]}}.
+    {ok, {{one_for_one, 10, 10}, [Helper, Registrar, AutoConfig|NetworkProcesses]}}.
 
 listener_specs(Pairs) ->
     [ ?LISTENER(IP, Port) || {IP, Port} <- Pairs ].

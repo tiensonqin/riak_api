@@ -21,7 +21,20 @@
 %% -------------------------------------------------------------------
 -module(riak_api_config).
 -export([get_listeners/0,
-         get_listeners/1]).
+         get_listeners/1,
+         get_interfaces/0]).
+
+get_interfaces() ->
+    {ok, IFs} = inet:getifaddrs(),
+    lists:sort(lists:flatmap(fun({IF, Attrs0}) ->
+                          Attrs1 = [ T || {A, _}=T <- Attrs0,
+                                          A == addr orelse A == netmask ],
+                          case Attrs1 of
+                              [] -> [];
+                              _ -> [{IF, Attrs1}]
+                          end
+                  end, IFs)).
+
 
 %% @doc Returns all listener specifications, grouped by protocol.
 get_listeners() ->
