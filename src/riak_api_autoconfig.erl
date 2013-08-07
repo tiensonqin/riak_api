@@ -161,7 +161,8 @@ update_my_config(OldConfig, #state{actor=AID}) ->
 maybe_store(true, NewConfig) -> store_config(NewConfig);
 maybe_store(_, Config) -> Config.
 
-maybe_notify(_Bool, _Config) -> todo.
+maybe_notify(true, Config) -> riak_api_autoconfig_events:notify(value(Config));
+maybe_notify(_, _) -> ok.
 
 store_config(NewConfig) ->
     riak_core_metadata:put(riak_api, peer_info, NewConfig),
