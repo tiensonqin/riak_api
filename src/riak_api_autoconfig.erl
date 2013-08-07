@@ -90,21 +90,13 @@ normal({timeout, T, tick}, #state{timer=T}=State) ->
         true ->
             %% Get the latest config and see if it matches, merging
             %% with local state for safety.
-            Config0 = State#state.config,
-            PeerConfig = ?MAP:merge(Config0, get_raw_config()),
-            PeersChanged = ?MAP:equal(Config0, PeerConfig),
+            {PeersChanged, PeerConfig} = check_config_changed(State),
 
             %% Compute any membership differences and remove them
-            OldMembers = State#state.members,
-            NewMembers = get_members(),
-            RemovedMembers = ordsets:to_list(ordsets:subtract(OldMembers, NewMembers)),
-            Config1 = remove_members(State#state.actor, PeerConfig, RemovedMembers),
-            DidRemove = (RemovedMembers == []),
+            {DidRemove, NewMembers, Config1} = check_member_removal(State, PeerConfig),
 
             %% Store the updated config and broadcast if it changed
-            ShouldUpdate = PeersChanged orelse DidRemove,
-            maybe_store(ShouldUpdate, Config1),
-            maybe_notify(ShouldUpdate, Config1),
+            maybe_store_and_notify(PeersChanged orelse DidRemove, Config1),
             {next_state, normal, State#state{config=Config1,
                                              members=NewMembers,
                                              timer=T1}}
@@ -149,6 +141,18 @@ remove_members(AID, Config, Removals) ->
     Ops = [ {remove, ?PEER_KEY(Node)} || Node <- Removals ],
     ?MAP:update({update, Ops}, AID, Config).
 
+check_config_changed(#state{config=Config0}) ->
+    PeerConfig = ?MAP:merge(Config0, get_raw_config()),
+    PeersChanged = ?MAP:equal(Config0, PeerConfig),
+    {PeersChanged, PeerConfig}.
+
+check_member_removal(#state{actor=Actor, members=OldMembers}, PeerConfig) ->
+    NewMembers = get_members(),
+    RemovedMembers = ordsets:to_list(ordsets:subtract(OldMembers, NewMembers)),
+    Config1 = remove_members(Actor, PeerConfig, RemovedMembers),
+    DidRemove = (RemovedMembers == []),
+    {DidRemove, NewMembers, Config1}.
+
 update_my_config(State) ->
     OldConfig = get_raw_config(),
     update_my_config(OldConfig, State).
@@ -158,11 +162,10 @@ update_my_config(OldConfig, #state{actor=AID}) ->
     ?MAP:update({update, [{update, ?LOCAL_KEY, [{assign, Data, make_micro_epoch()}]}]},
                             AID, OldConfig).
 
-maybe_store(true, NewConfig) -> store_config(NewConfig);
-maybe_store(_, Config) -> Config.
-
-maybe_notify(true, Config) -> riak_api_autoconfig_events:notify(value(Config));
-maybe_notify(_, _) -> ok.
+maybe_store_and_notify(true, NewConfig) ->
+    store_config(NewConfig),
+    riak_api_autoconfig_events:notify(value(NewConfig));
+maybe_store_and_notify(_,_) -> ok.
 
 store_config(NewConfig) ->
     riak_core_metadata:put(riak_api, peer_info, NewConfig),
