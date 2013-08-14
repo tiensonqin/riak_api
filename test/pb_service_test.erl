@@ -86,6 +86,11 @@ process_stream(_, _, State) ->
 %% Eunit tests
 %% ===================================================================
 setup() ->
+    case erlang:is_alive() of
+        true -> ok;
+        false ->
+            {ok, _} = net_kernel:start(['riak_api_test@127.0.0.1', longnames])
+    end,
     Deps = resolve_deps(riak_api), %% Implicitly loads apps
 
     application:set_env(sasl, sasl_error_logger, {file, "pb_service_test_sasl.log"}),
@@ -94,8 +99,16 @@ setup() ->
 
     application:set_env(lager, handlers, [{lager_file_backend, [{"pb_service_test.log", debug, 10485760, "$D0", 5}]}]),
     application:set_env(lager, error_logger_redirect, true),
+    [ application:set_env(riak_sysmon, Key, Value) || {Key, Value} <- [
+         {process_limit, 30},
+         {port_limit, 2},
+         {gc_ms_limit, 0},
+         {heap_word_limit, 40111000},
+         {busy_port, true},
+         {busy_dist_port, true}] ],
 
     application:set_env(riak_core, handoff_port, 0),
+    application:set_env(riak_core, platform_data_dir, "data"),
 
     OldListeners = app_helper:get_env(riak_api, pb, [{"127.0.0.1", 8087}]),
     application:set_env(riak_api, pb, [{"127.0.0.1", 32767}]),
@@ -111,6 +124,7 @@ cleanup({L, Deps}) ->
     [ application:stop(A) || A <- lists:reverse(Deps), not is_otp_base_app(A) ],
     wait_for_application_shutdown(riak_api),
     application:set_env(riak_api, pb, L),
+    net_kernel:stop(),
     ok.
 
 request_multi(Payloads) when is_list(Payloads) ->
@@ -247,7 +261,9 @@ wait_for_port(TRef) ->
     receive
         timeout ->
             lager:error("PB port did not come up within timeout"),
-            {error, timeout};
+            exit({timeout, pb_port});
+        {error, econnrefused} ->
+            wait_for_port(TRef);
         {error, Reason} ->
             lager:debug("Waiting for PB port failed: ~p", [Reason]),
             wait_for_port(TRef);
@@ -271,8 +287,12 @@ wait_for_application_shutdown(App) ->
 %% applications.
 dep_apps(App) ->
     application:load(App),
-    {ok, Apps} = application:get_key(App, applications),
-    Apps.
+    case application:get_key(App, applications) of
+        undefined ->
+            [];
+        {ok, Apps} ->
+            Apps
+    end.
 
 all_deps(App, Deps) ->
     [[ all_deps(Dep, [App|Deps]) || Dep <- dep_apps(App),

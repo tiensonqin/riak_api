@@ -22,8 +22,10 @@
 -module(riak_api_autoconfig).
 -behaviour(gen_fsm).
 
--define(MAP, riak_dt_rwmap).
+-define(MAP, riak_dt_multi).
 -define(REGISTER, riak_dt_lwwreg).
+-define(META_OPTS, [{default, ?MAP:new()},
+                    {resolver, fun ?MAP:merge/2}]).
 -define(LOCAL_KEY, {node(), ?REGISTER}).
 -define(PEER_KEY(N), {N, ?REGISTER}).
 
@@ -46,7 +48,7 @@
          normal/2, normal/3]).
 
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, []).
+    gen_fsm:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 get() ->
     gen_fsm:sync_send_all_state_event(?MODULE, get_config).
@@ -67,7 +69,6 @@ wait_for_capable({timeout, T, tick}, #state{timer=T}=State) ->
         true ->
             %% We assume that if discovery is on, that the broadcast
             %% system exists and is in-use.
-
             {next_state, normal, State#state{config=store_config(update_my_config(State)),
                                              members=get_members(),
                                              timer=T1}}
@@ -129,9 +130,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% Private functions
 %%---------------------------
 get_raw_config() ->
-    riak_core_metadata:get(riak_api, peer_info,
-                           [{default, ?MAP:new()},
-                            {resolver, fun ?MAP:merge/2}]).
+    riak_core_metadata:get({riak_api, discovery}, peer_info, ?META_OPTS).
 
 value(Map) ->
     [ {K, V} || {{K, _}, V} <- ?MAP:value(Map) ].
@@ -159,7 +158,7 @@ update_my_config(State) ->
 
 update_my_config(OldConfig, #state{actor=AID}) ->
     Data = lists:sort([{interfaces, riak_api_config:get_interfaces()} |riak_api_config:get_listeners()]),
-    ?MAP:update({update, [{update, ?LOCAL_KEY, [{assign, Data, make_micro_epoch()}]}]},
+    ?MAP:update({update, [{update, ?LOCAL_KEY, {assign, Data, make_micro_epoch()}}]},
                             AID, OldConfig).
 
 maybe_store_and_notify(true, NewConfig) ->
@@ -168,7 +167,7 @@ maybe_store_and_notify(true, NewConfig) ->
 maybe_store_and_notify(_,_) -> ok.
 
 store_config(NewConfig) ->
-    riak_core_metadata:put(riak_api, peer_info, NewConfig),
+    riak_core_metadata:put({riak_api,discovery}, peer_info, NewConfig, ?META_OPTS),
     NewConfig.
 
 is_capable() ->
