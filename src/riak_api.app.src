@@ -8,7 +8,9 @@
                   kernel,
                   stdlib,
                   lager,
-                  riak_core
+                  riak_core,
+                  riak_dt,
+                  riak_pb
                  ]},
   {registered, [riak_api_sup,
                 riak_api_pb_sup]},
