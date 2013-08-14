@@ -159,7 +159,27 @@
 -compile([{no_auto_import, [register/2]}]).
 
 %% Behaviour API
--export([behaviour_info/1]).
+-type error_term() :: iodata() | {format, term()} | {format, io:format(), [term()]}.
+-type multi_reply() :: term() | [ term() ].
+-callback init() -> ServiceState::term().
+
+-callback decode(Code::non_neg_integer(), BinMsg::binary()) ->
+    {ok, Msg::term()} | {ok, Msg::term(), {Permission::string(), Bucket::binary()}} |
+    {error, Reason::term()}.
+
+-callback encode(Msg::term()) -> {ok, BinMsg::binary()}.
+
+-callback process(Msg::term(), ServiceState::term()) ->
+    {reply, ReplyMessage::term(), NewState::term()} |
+    {reply, {stream, ReqId::term()}, NewState::term()} |
+    {error, ErrData::error_term(), NewState::term()}.
+
+-callback process_stream(Message::term(), ReqId::term(), State::term()) ->
+    {reply, Reply::multi_reply(), NewState::term()} |
+    {ignore, NewState::term()} |
+    {done, Reply::multi_reply(), NewState::term()} |
+    {done, NewState::term()} |
+    {error, Error::error_term(), NewState::term()}.
 
 %% Service-provider API
 -export([register/1,
@@ -172,17 +192,6 @@
 -type registration() :: {Service::module(), MinCode::pos_integer(), MaxCode::pos_integer()}.
 
 -export_type([registration/0]).
-
-%% @doc Behaviour information callback. PB API services must implement
-%% the given functions.
-behaviour_info(callbacks) ->
-    [{init,0},
-     {decode,2},
-     {encode,1},
-     {process,2},
-     {process_stream,3}];
-behaviour_info(_) ->
-    undefined.
 
 %% @doc Registers a number of services at once.
 %% @see register/3
