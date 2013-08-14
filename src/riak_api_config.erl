@@ -38,9 +38,12 @@ get_interfaces() ->
 
 %% @doc Returns all listener specifications, grouped by protocol.
 get_listeners() ->
-    [ {Key, L} || Key <- [ pb ],
-                  L = get_listeners(Key),
-                  L /= [] ].
+    lists:flatmap(fun(Key) ->
+                          case get_listeners(Key) of
+                              [] -> [];
+                              L -> [{Key, L}]
+                          end
+                  end, [ pb ]).
 
 %% @doc Fetches listener specifications by protocol.
 -spec get_listeners(Protocol::pb | http | https) -> [ {inet:ip_address(), inet:port_number()} ].
@@ -100,7 +103,7 @@ listeners_test_() ->
                application:unset_env(riak_api, pb),
                application:set_env(riak_api, pb_ip, "127.0.0.1"),
                application:set_env(riak_api, pb_port, 10887),
-               ?assertEqual([{"127.0.0.1", 10887}], get_listeners())
+               ?assertEqual([{pb, [{"127.0.0.1", 10887}]}], get_listeners())
        end},
       {"missing old IP config key disables listener",
        fun() ->
@@ -119,7 +122,7 @@ listeners_test_() ->
       {"bad configs are ignored",
        fun() ->
               application:set_env(riak_api, pb, [{"0.0.0.0", 8087}, badjuju]),
-               ?assertEqual([{"0.0.0.0", 8087}], get_listeners())
+               ?assertEqual([{pb, [{"0.0.0.0", 8087}]}], get_listeners())
        end}]}.
 
 -endif.
