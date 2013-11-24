@@ -2,7 +2,7 @@
 %%
 %% riak_api_web: setup Riak's HTTP interface
 %%
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2013 Basho Technologies, Inc.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -50,8 +50,8 @@ binding_config(Scheme, Binding) ->
     Config = spec_from_binding(Scheme, Name, Binding),
 
     {Name,
-     {webmachine_mochiweb, start, [Config]},
-     permanent, 5000, worker, [mochiweb_socket_server]}.
+     {webmachine_ws, start, [Config]},
+     permanent, 5000, worker, [webmachine_ws]}.
 
 spec_from_binding(http, Name, {Ip, Port}) ->
     lists:flatten([{name, Name},
